@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "node",
-    "start": "node ./app/index.js"
+    "start": "nodemon index.js"
   },
   "repository": {
     "type": "git",
@@ -21,8 +21,10 @@
   },
   "homepage": "https://github.com/HusniArr/receipt-pos-with-node#readme",
   "dependencies": {
+    "dotenv": "^16.0.3",
     "escpos": "^3.0.0-alpha.6",
     "express": "^4.18.2",
+    "nodemon": "^2.0.20",
     "pg": "^8.9.0"
   }
 }

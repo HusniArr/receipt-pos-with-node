@@ -1,49 +1,67 @@
+const express = require('express');
+const { Pool } = require('pg');
 const escpos = require('escpos');
-const pg = require('pg');
+require('dotenv').config();
 
-const client = new pg.Client({
-    user:'postgres',
-    host:'postgres',
-    database:'pos',
-    password:'password',
-    port:5432
+const app = express();
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: {
+      rejectUnauthorized: false,
+    },
 });
 
-const device = new escpos.Serial('', { baudRate: 9600});
+app.use(express.json());
 
-async function generateReceipt(){
-    try {
-        await client.connect();
+app.get('/', (req, res) =>{
+    res.status(200).json({message:'hello world...'})
+});
 
-        const { rows } = await client.query('SELECT * FROM items');
+app.get('/items', async (req, res) => {
+  const { rows } = await pool.query('SELECT * FROM items');
+  res.json(rows);
+});
 
-        const printer = new escpos.Printer(device);
+app.post('/receipt', async (req, res) => {
+  const { items } = req.body;
 
-        printer
-            .align('center')
-            .image('','s8')
-            .text('JOSS TENAN')
-            .text('Jl. Raya Jend. Sudirman KM 11 - Bumiayu')
-            .text('081234347')
-            .text('Receipt')
-            .text('---------------------------------------')
-            .text('Item                   Price         Qty    Subtotal');
+  // Connect to the printer
+  const device = new escpos.Network('192.168.0.100');
+  const printer = new escpos.Printer(device);
 
-        rows.forEach(({name, price, quantity, subtotal}) => {
-            printer.text(`${name} ${price} ${quantity} ${subtotal}`);
-        });
-
-        printer
-            .text('..........................')
-            .text('Total: ')
-            .text('..........................')
-            .cut();
-        await printer.execute();
-    } catch (error) {
-        console.error(error);
-    } finally {
-        await client.end();
+  device.open(async (err) => {
+    if (err) {
+      console.error(err);
+      res.sendStatus(500);
+      return;
     }
-}
 
-generateReceipt();
+    // Set the character encoding to support special characters
+    printer.characterSet('WINDOWS-1252');
+
+    // Print the logo image
+    const logo = escpos.Image.load('public/logo.png', { encoding: 'base64' });
+    printer.image(logo);
+
+    // Print the receipt header
+    printer.align('center');
+    printer.text('RECEIPT\n\n');
+
+    // Print each item in the receipt
+    for (const itemId of items) {
+      const { rows } = await pool.query('SELECT * FROM items WHERE id = $1', [itemId]);
+      const { name, price } = rows[0];
+      printer.text(`${name} ${price}\n`);
+    }
+
+    // Print the receipt footer
+    printer.text('\nThank you for shopping with us!\n');
+    printer.cut();
+    printer.close();
+    res.sendStatus(200);
+  });
+});
+
+app.listen(3000, () => {
+  console.log('Server listening on port 3000');
+});
